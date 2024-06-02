@@ -12,8 +12,6 @@
 package game
 
 import "core:fmt"
-// import ldtk "third_party:odin-ldtk"
-// import "core:math/linalg"
 import rl "vendor:raylib"
 
 TILE_SIZE :: 40

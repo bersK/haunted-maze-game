@@ -66,7 +66,7 @@ tile :: struct {
 	flip_y: bool,
 }
 
-collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int = 0) {
+collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int = 0) -> (collision_tiles: [dynamic]u8, tiles: [dynamic]tile) {
 	if len(project.levels) - 1 < level_idx {
 		log.debug("No such level idx in ldtk project")
 		return
@@ -76,8 +76,8 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 	tile_size := 32
 	tile_columns := -1
 	tile_rows := -1
-	collision_tiles: []u8
-	tile_data: []tile
+	collision_tiles= make([dynamic]u8)
+	tiles = make([dynamic]tile)
 
 	entities_data: []Entity
 	sentry_data := make([dynamic]SentryData)
@@ -86,32 +86,39 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 	for layer in level.layer_instances {
 		switch layer.type {
 		case .IntGrid:
+			if layer.identifier != "Collisions" do continue
+
+			log.debug("This is the collision layer")
+
 			tile_columns = layer.c_width
 			tile_rows = layer.c_height
-			//tile_size = 720 / tile_rows
-			collision_tiles = make([]u8, tile_columns * tile_rows)
+
+                        non_zero_reserve_dynamic_array(&collision_tiles, len(collision_tiles) + (tile_columns * tile_rows))
 			tile_offset.x = f32(layer.px_total_offset_x)
 			tile_offset.y = f32(layer.px_total_offset_y)
 
 			for val, idx in layer.int_grid_csv {
-				collision_tiles[idx] = u8(val)
+                                append(&collision_tiles, u8(val))
 			}
 
 
-			tile_data = make([]tile, len(layer.auto_layer_tiles))
+                        non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
 
+                        t: tile
 			multiplier: f32 = f32(tile_size) / f32(layer.grid_size)
-			for val, idx in layer.auto_layer_tiles {
-				tile_data[idx].dst.x = f32(val.px.x) * multiplier
-				tile_data[idx].dst.y = f32(val.px.y) * multiplier
-				tile_data[idx].src.x = f32(val.src.x)
+			for val in layer.auto_layer_tiles {
+				t.dst.x = f32(val.px.x) * multiplier
+				t.dst.y = f32(val.px.y) * multiplier
+				t.src.x = f32(val.src.x)
 				f := val.f
-				tile_data[idx].src.y = f32(val.src.y)
-				tile_data[idx].flip_x = bool(f & 1)
-				tile_data[idx].flip_y = bool(f & 2)
+				t.src.y = f32(val.src.y)
+				t.flip_x = bool(f & 1)
+				t.flip_y = bool(f & 2)
+                                append(&tiles, t)
 			}
 
 		case .Entities:
+			log.debug("This is the entities layer")
 			entities_data = make([]Entity, len(layer.entity_instances))
 			for entity_instance, ei in layer.entity_instances {
 				if entity_instance.identifier == "Sentry" {
@@ -126,13 +133,13 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 					for fi in entity_instance.field_instances {
 						if fi.identifier == "Direction" {
 							if dir, ok := parse_direction_ldtk(fi); ok {
-                                                                ed.look_dir = dir
-                                                        }
+								ed.look_dir = dir
+							}
 						}
 						if fi.identifier == "Point" {
-							if ok: = parse_sentry_points_ldtk(fi, &sentry_data); ok {
+							if ok := parse_sentry_points_ldtk(fi, &sentry_data); ok {
 
-                                                        }
+							}
 						}
 					}
 				}
@@ -141,9 +148,42 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 			log.debug(sentry_data)
 
 		case .Tiles:
+
 		case .AutoLayer:
+			if layer.identifier != "Floors" do continue
+
+			log.debug("This is the floor layer")
+
+			tile_columns = layer.c_width
+			tile_rows = layer.c_height
+			//tile_size = 720 / tile_rows
+                        non_zero_reserve_dynamic_array(&collision_tiles, len(collision_tiles) + (tile_columns * tile_rows))
+
+			tile_offset.x = f32(layer.px_total_offset_x)
+			tile_offset.y = f32(layer.px_total_offset_y)
+
+			for val in layer.int_grid_csv {
+                                append(&collision_tiles, u8(val))
+			}
+
+
+                        t: tile
+                        non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
+
+			multiplier: f32 = f32(tile_size) / f32(layer.grid_size)
+			for val, idx in layer.auto_layer_tiles {
+				t.dst.x = f32(val.px.x) * multiplier
+				t.dst.y = f32(val.px.y) * multiplier
+				t.src.x = f32(val.src.x)
+				f := val.f
+				t.src.y = f32(val.src.y)
+				t.flip_x = bool(f & 1)
+				t.flip_y = bool(f & 2)
+                                append(&tiles, t)
+			}
 		}
 	}
+        return
 }
 
 next_level_ldtk :: proc(level_idx: int = 0) {
