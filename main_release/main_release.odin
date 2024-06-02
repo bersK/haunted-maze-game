@@ -17,20 +17,21 @@ main :: proc() {
 		context.allocator = allocator_from_tracking_allocator(&tracking_allocator)
 	}
 
-	mode: int = 0
-	when ODIN_OS == .Linux || ODIN_OS == .Darwin {
-		mode = os.S_IRUSR | os.S_IWUSR | os.S_IRGRP | os.S_IROTH
-	}
+	// mode: int = 0
+	// when ODIN_OS == .Linux || ODIN_OS == .Darwin {
+	// 	mode = os.S_IRUSR | os.S_IWUSR | os.S_IRGRP | os.S_IROTH
+	// }
 
-	logh, logh_err := os.open("log.txt", (os.O_CREATE | os.O_TRUNC | os.O_RDWR), mode)
+	// logh, logh_err := os.open("log.txt", (os.O_CREATE | os.O_TRUNC | os.O_RDWR), mode)
 
-	if logh_err == os.ERROR_NONE {
-		os.stdout = logh
-		os.stderr = logh
-	}
+	// if logh_err == os.ERROR_NONE {
+	// 	os.stdout = logh
+	// 	os.stderr = logh
+	// }
 
-	logger := logh_err == os.ERROR_NONE ? log.create_file_logger(logh) : log.create_console_logger()
-	context.logger = logger
+	// logger := logh_err == os.ERROR_NONE ? log.create_file_logger(logh) : log.create_console_logger()
+	// context.logger = logger
+	context.logger = log.create_console_logger()
 	
 	game.game_init_window()
 	game.game_init()
@@ -54,9 +55,9 @@ main :: proc() {
 	game.game_shutdown()
 	game.game_shutdown_window()
 	
-	if logh_err == os.ERROR_NONE {
-		log.destroy_file_logger(&logger)
-	}
+	// if logh_err == os.ERROR_NONE {
+	// 	log.destroy_file_logger(&logger)
+	// }
 
 	when UseTrackingAllocator {
 		for key, value in tracking_allocator.allocation_map {
