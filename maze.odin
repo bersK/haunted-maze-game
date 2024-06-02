@@ -120,7 +120,7 @@ collect_tiles_from_ldtk_project :: proc(
 			level_metadata.grid_y = tile_columns
 
 
-			non_zero_reserve_dynamic_array(
+			reserve(
 				&collision_tiles,
 				len(collision_tiles) + (tile_columns * tile_rows),
 			)
@@ -132,7 +132,7 @@ collect_tiles_from_ldtk_project :: proc(
 			}
 
 
-			non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
+			reserve(&tiles, len(tiles) + len(layer.auto_layer_tiles))
 
 			t: tile
 			multiplier: f32 = f32(tile_size) / f32(layer.grid_size)
@@ -202,7 +202,7 @@ collect_tiles_from_ldtk_project :: proc(
 			tile_columns = layer.c_width
 			tile_rows = layer.c_height
 			//tile_size = 720 / tile_rows
-			non_zero_reserve_dynamic_array(
+			reserve(
 				&collision_tiles,
 				len(collision_tiles) + (tile_columns * tile_rows),
 			)
@@ -216,7 +216,7 @@ collect_tiles_from_ldtk_project :: proc(
 
 
 			t: tile
-			non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
+			reserve(&tiles, len(tiles) + len(layer.auto_layer_tiles))
 
 			multiplier: f32 = f32(tile_size) / f32(layer.grid_size)
 			for val in layer.auto_layer_tiles {

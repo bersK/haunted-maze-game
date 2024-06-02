@@ -141,7 +141,11 @@ game_init :: proc() {
 
 @(export)
 game_shutdown :: proc() {
+	// NOTE: This is terrible, think of something better in the future
 	delete(g_mem.sentries)
+	for ed in g_mem.sentries_data {
+		delete(ed.target_points)
+	}
 	delete(g_mem.sentries_data)
 	delete(g_mem.ghosts)
 	delete(g_mem.ghosts_data)
@@ -150,7 +154,7 @@ game_shutdown :: proc() {
 	delete(g_mem.level_metadata.collision_tiles)
 	delete(g_mem.level_metadata.tiles)
 	delete(g_mem.level_metadata.pickups)
-        delete(g_mem.level_metadata.entities)
+	delete(g_mem.level_metadata.entities)
 
 	rl.UnloadTexture(g_mem.tilemap_texture)
 
