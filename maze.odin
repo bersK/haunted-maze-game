@@ -163,7 +163,7 @@ collect_tiles_from_ldtk_project :: proc(
 						location = entity_instance.grid,
 						look_dir = .Down,
 					}
-					append(&sentry_data, SentryData{})
+					append(sentry_data, SentryData{})
 
 					for fi in entity_instance.field_instances {
 						if fi.identifier == "Direction" {
@@ -172,7 +172,7 @@ collect_tiles_from_ldtk_project :: proc(
 							}
 						}
 						if fi.identifier == "Point" {
-							if ok := parse_sentry_points_ldtk(fi, &sentry_data); ok {
+							if ok := parse_sentry_points_ldtk(fi, sentry_data); ok {
 
 							}
 						}
