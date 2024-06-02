@@ -1,10 +1,15 @@
 package game
 
-import "core:encoding/json"
 import "core:log"
-import "core:os"
 import ldtk "third_party:odin-ldtk"
 import rl "vendor:raylib"
+
+ENameStart :: "Start"
+ENameEnd :: "End"
+ENameSentry :: "Sentry"
+ENameWallPortal :: "WallPortal"
+ENameSoulPickup :: "SoulPickup"
+ENameGenericPickup :: "GenericPickup"
 
 TileType :: enum {
 	Floor,
@@ -66,21 +71,40 @@ tile :: struct {
 	flip_y: bool,
 }
 
-collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int = 0) -> (collision_tiles: [dynamic]u8, tiles: [dynamic]tile) {
+PickupType :: enum {
+	Soul,
+	Generic,
+}
+
+Pickup :: struct {
+	location: Vec2i,
+	type:     PickupType,
+}
+
+BrokenWallLocation :: distinct Vec2i
+
+collect_tiles_from_ldtk_project :: proc(
+	project: ^ldtk.Project,
+	level_idx: int = 0,
+) -> (
+	level_metadata: LevelData,
+	success: bool,
+) {
 	if len(project.levels) - 1 < level_idx {
 		log.debug("No such level idx in ldtk project")
 		return
 	}
 
 	tile_offset: rl.Vector2
-	tile_size := 32
+	tile_size := 16
 	tile_columns := -1
 	tile_rows := -1
-	collision_tiles= make([dynamic]u8)
-	tiles = make([dynamic]tile)
 
-	entities_data: []Entity
-	sentry_data := make([dynamic]SentryData)
+	level_metadata.cell_size = tile_size
+	using level_metadata
+
+        clear(&g_mem.sentries_data)
+	sentry_data := &g_mem.sentries_data
 
 	level := &project.levels[level_idx]
 	for layer in level.layer_instances {
@@ -92,19 +116,25 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 
 			tile_columns = layer.c_width
 			tile_rows = layer.c_height
+			level_metadata.grid_x = tile_rows
+			level_metadata.grid_y = tile_columns
 
-                        non_zero_reserve_dynamic_array(&collision_tiles, len(collision_tiles) + (tile_columns * tile_rows))
+
+			non_zero_reserve_dynamic_array(
+				&collision_tiles,
+				len(collision_tiles) + (tile_columns * tile_rows),
+			)
 			tile_offset.x = f32(layer.px_total_offset_x)
 			tile_offset.y = f32(layer.px_total_offset_y)
 
-			for val, idx in layer.int_grid_csv {
-                                append(&collision_tiles, u8(val))
+			for val in layer.int_grid_csv {
+				append(&collision_tiles, u8(val))
 			}
 
 
-                        non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
+			non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
 
-                        t: tile
+			t: tile
 			multiplier: f32 = f32(tile_size) / f32(layer.grid_size)
 			for val in layer.auto_layer_tiles {
 				t.dst.x = f32(val.px.x) * multiplier
@@ -114,15 +144,20 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 				t.src.y = f32(val.src.y)
 				t.flip_x = bool(f & 1)
 				t.flip_y = bool(f & 2)
-                                append(&tiles, t)
+				append(&tiles, t)
 			}
 
 		case .Entities:
 			log.debug("This is the entities layer")
-			entities_data = make([]Entity, len(layer.entity_instances))
+
+			if entities == nil {
+				entities = make([dynamic]Entity, len(layer.entity_instances))
+			} else {
+				clear(&entities)
+			}
 			for entity_instance, ei in layer.entity_instances {
-				if entity_instance.identifier == "Sentry" {
-					ed := &entities_data[ei]
+				if entity_instance.identifier == ENameSentry {
+					ed := &entities[ei]
 					ed^ = Entity {
 						type     = .Sentry,
 						location = entity_instance.grid,
@@ -143,6 +178,16 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 						}
 					}
 				}
+				if entity_instance.identifier == ENameStart {
+				}
+				if entity_instance.identifier == ENameEnd {
+				}
+				if entity_instance.identifier == ENameWallPortal {
+				}
+				if entity_instance.identifier == ENameSoulPickup {
+				}
+				if entity_instance.identifier == ENameGenericPickup {
+				}
 			}
 
 			log.debug(sentry_data)
@@ -157,21 +202,24 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 			tile_columns = layer.c_width
 			tile_rows = layer.c_height
 			//tile_size = 720 / tile_rows
-                        non_zero_reserve_dynamic_array(&collision_tiles, len(collision_tiles) + (tile_columns * tile_rows))
+			non_zero_reserve_dynamic_array(
+				&collision_tiles,
+				len(collision_tiles) + (tile_columns * tile_rows),
+			)
 
 			tile_offset.x = f32(layer.px_total_offset_x)
 			tile_offset.y = f32(layer.px_total_offset_y)
 
 			for val in layer.int_grid_csv {
-                                append(&collision_tiles, u8(val))
+				append(&collision_tiles, u8(val))
 			}
 
 
-                        t: tile
-                        non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
+			t: tile
+			non_zero_reserve_dynamic_array(&tiles, len(tiles) + len(layer.auto_layer_tiles))
 
 			multiplier: f32 = f32(tile_size) / f32(layer.grid_size)
-			for val, idx in layer.auto_layer_tiles {
+			for val in layer.auto_layer_tiles {
 				t.dst.x = f32(val.px.x) * multiplier
 				t.dst.y = f32(val.px.y) * multiplier
 				t.src.x = f32(val.src.x)
@@ -179,38 +227,54 @@ collect_tiles_from_ldtk_project :: proc(project: ^ldtk.Project, level_idx: int =
 				t.src.y = f32(val.src.y)
 				t.flip_x = bool(f & 1)
 				t.flip_y = bool(f & 2)
-                                append(&tiles, t)
+				append(&tiles, t)
 			}
 		}
 	}
-        return
+	success = true
+	return
 }
 
-next_level_ldtk :: proc(level_idx: int = 0) {
+load_level_ldtk :: proc(level_idx: int = 0) {
 	project: Maybe(ldtk.Project)
-	// ok: bool
-	// data: []u8
-	// when ODIN_DEBUG {
-	// 	data, ok = os.read_entire_file(LDTK_PROJECT_PATH, context.temp_allocator)
-	// 	project = ldtk.load_from_memory(data, context.temp_allocator)
-	// } else {
-	// 	data = ldtk_project
-	// 	ok = true
-	// }
-	// if !ok {
-	// 	log.debug("Failed to load ldtk project:", LDTK_PROJECT_PATH)
-	// }
 
 	project = ldtk.load_from_memory(ldtk_project, context.temp_allocator)
 	if proj, pok := project.?; pok {
-		collect_tiles_from_ldtk_project(&proj, level_idx)
+		success: bool
+		g_mem.level_metadata, success = collect_tiles_from_ldtk_project(&proj, level_idx)
+		if !success {
+			return
+		}
+
+		g_mem.current_level_id = level_idx
+
+		// g_mem.level_texture = rl.LoadRenderTexture(
+		// 	i32(g_mem.level_metadata.grid_x * g_mem.level_metadata.cell_size),
+		// 	i32(g_mem.level_metadata.grid_y * g_mem.level_metadata.cell_size),
+		// )
+
+		// rl.BeginDrawing()
+		// defer rl.EndDrawing()
+
+		// rl.BeginTextureMode(g_mem.level_texture)
+		// rect_src: rl.Rectangle
+		// rect_dst: rl.Rectangle
+		// for t in g_mem.level_metadata.tiles {
+		// 	// t.
+		// 	rect_src.x = t.src.x
+		// 	rect_src.y = t.src.y
+		// 	rect_dst.x = t.dst.x
+		// 	rect_dst.y = t.dst.y
+		// 	rl.DrawTexturePro(g_mem.tilemap_texture, rect_src, rect_dst, {}, 0, rl.WHITE)
+		// }
+		// rl.EndTextureMode()
 	}
 }
 
 current_level: int
 next_level :: proc() -> (maze: [25]MazeTile, level_id: int) {
 	@(static)
-	maze_levels: [1][25]MazeTile =  {
+	maze_levels: [5][25]MazeTile =  {
 		 {
 			{location = {0, 0}, tile_type = .Floor, occupied_by = nil},
 			{location = {1, 0}, tile_type = .Floor, occupied_by = nil},
@@ -238,6 +302,10 @@ next_level :: proc() -> (maze: [25]MazeTile, level_id: int) {
 			{location = {3, 4}, tile_type = .Floor, occupied_by = nil},
 			{location = {4, 4}, tile_type = .Floor, occupied_by = nil},
 		},
+		{},
+		{},
+		{},
+		{},
 	}
 	current_level += 1
 	current_level %= len(maze_levels)
@@ -254,7 +322,7 @@ next_level :: proc() -> (maze: [25]MazeTile, level_id: int) {
 		g_mem.end_tile_id = 22
 	}
 
-	next_level_ldtk()
+	load_level_ldtk(current_level)
 	return maze_levels[current_level], current_level
 }
 

@@ -14,7 +14,7 @@ package game
 import "core:fmt"
 import rl "vendor:raylib"
 
-TILE_SIZE :: 40
+TILE_SIZE :: 16
 MAZE_ROW :: 5
 MAZE_COL :: 5
 
@@ -25,21 +25,36 @@ GameMemory :: struct {
 	start_tile_id:    int,
 	end_tile_id:      int,
 	current_level_id: int,
-	player:           Entity,
+	player:           Player,
 	sentries:         [dynamic]Entity,
 	sentries_data:    [dynamic]SentryData,
 	ghosts:           [dynamic]Entity,
 	ghosts_data:      [dynamic]GhostsData,
+	level_metadata:   LevelData,
+	level_texture:    rl.RenderTexture,
+	tilemap_texture:  rl.Texture,
 }
+
+LevelData :: struct {
+	collision_tiles:      [dynamic]u8,
+	tiles:                [dynamic]tile,
+	pickups:              [dynamic]Pickup,
+	broken_walls:         [dynamic]BrokenWallLocation,
+	level_start_location: Vec2i,
+	level_end_location:   Vec2i,
+	grid_x:               int,
+	grid_y:               int,
+	cell_size:            int,
+	entities:             [dynamic]Entity,
+}
+
 g_mem: ^GameMemory
 
 game_camera :: proc() -> rl.Camera2D {
 	w := f32(rl.GetScreenWidth())
 	h := f32(rl.GetScreenHeight())
 
-	target_ :=
-		(vec2_from_vec2i(g_mem.maze_tiles[len(g_mem.maze_tiles) - 1].location * TILE_SIZE) / 2) +
-		TILE_SIZE / 2
+	target_ := vec2_from_vec2i(g_mem.player.location)
 
 	return {zoom = h / PixelWindowHeight, target = target_, offset = {w / 2, h / 2}}
 }
@@ -49,32 +64,7 @@ ui_camera :: proc() -> rl.Camera2D {
 }
 
 update :: proc() {
-	input: Vec2i
-
-	if rl.IsKeyReleased(.UP) {
-		input.y -= TILE_SIZE
-	}
-	if rl.IsKeyReleased(.DOWN) {
-		input.y += TILE_SIZE
-	}
-	if rl.IsKeyReleased(.LEFT) {
-		input.x -= TILE_SIZE
-	}
-	if rl.IsKeyReleased(.RIGHT) {
-		input.x += TILE_SIZE
-	}
-
-	if rl.IsKeyPressed(.G) {
-		place_ghost_in_maze(g_mem.player.location / TILE_SIZE)
-		reset_player_location()
-	}
-
-	if rl.IsKeyReleased(.L) {
-		g_mem.maze_tiles, g_mem.current_level_id = next_level()
-		reset_player_location()
-	}
-
-	g_mem.player.location += input
+	update_player()
 }
 
 
@@ -83,32 +73,37 @@ draw :: proc() {
 	defer rl.EndDrawing()
 
 	rl.ClearBackground(rl.BLACK)
-
 	rl.BeginMode2D(game_camera())
+	{
+		rect_src: rl.Rectangle
+		rect_dst: rl.Rectangle
+		rect_src.width = f32(g_mem.level_metadata.cell_size)
+		rect_src.height = f32(g_mem.level_metadata.cell_size)
+		rect_dst = rect_src
+		for t in g_mem.level_metadata.tiles {
+			// t.
+			rect_src.x = t.src.x
+			rect_src.y = t.src.y
+			rect_dst.x = t.dst.x
+			rect_dst.y = t.dst.y
+			rl.DrawTexturePro(g_mem.tilemap_texture, rect_src, rect_dst, {}, 0, rl.WHITE)
+		}
 
-	for tile in g_mem.maze_tiles {
-		color := rl.DARKGRAY if tile.tile_type == .Floor else rl.DARKBROWN
-		rl.DrawRectangleV(
-			position = {f32(tile.location.x * TILE_SIZE), f32(tile.location.y * TILE_SIZE)},
-			size = {TILE_SIZE, TILE_SIZE},
-			color = color,
-		)
+		for g in g_mem.ghosts {
+			draw_entity(g)
+		}
+
+		for s in g_mem.sentries {
+			draw_entity(s)
+		}
+		render_player()
 	}
-
-	for g in g_mem.ghosts {
-		draw_entity(g)
-	}
-
-	for s in g_mem.sentries {
-		draw_entity(s)
-	}
-
-	draw_entity(g_mem.player)
-
 	rl.EndMode2D()
 
 	rl.BeginMode2D(ui_camera())
-	rl.DrawText(fmt.ctprintf("player_pos: %v", g_mem.player.location), 5, 5, 8, rl.WHITE)
+	{
+		rl.DrawText(fmt.ctprintf("player_pos: %v", g_mem.player.location), 5, 5, 8, rl.WHITE)
+	}
 	rl.EndMode2D()
 }
 
@@ -137,6 +132,10 @@ game_init :: proc() {
 
 	game_hot_reloaded(g_mem)
 
+	if g_mem.tilemap_texture.id != 0 {
+		rl.UnloadTexture(g_mem.tilemap_texture)
+	}
+	g_mem.tilemap_texture = rl.LoadTexture(TILEMAP_PACKED_PATH)
 	setup_maze()
 }
 
@@ -146,6 +145,15 @@ game_shutdown :: proc() {
 	delete(g_mem.sentries_data)
 	delete(g_mem.ghosts)
 	delete(g_mem.ghosts_data)
+
+	delete(g_mem.level_metadata.broken_walls)
+	delete(g_mem.level_metadata.collision_tiles)
+	delete(g_mem.level_metadata.tiles)
+	delete(g_mem.level_metadata.pickups)
+        delete(g_mem.level_metadata.entities)
+
+	rl.UnloadTexture(g_mem.tilemap_texture)
+
 	free(g_mem)
 }
 
@@ -178,4 +186,3 @@ game_force_reload :: proc() -> bool {
 game_force_restart :: proc() -> bool {
 	return rl.IsKeyPressed(.F6)
 }
-
